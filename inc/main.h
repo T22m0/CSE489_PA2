@@ -27,7 +27,7 @@ extern int Num_conn;
 typedef struct{
 	int id;
 	char ip[INET_ADDRSTRLEN];
-	short int port;
+	unsigned short int port;
 }server;
 
 typedef struct{
