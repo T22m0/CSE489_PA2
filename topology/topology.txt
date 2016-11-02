@@ -1,8 +1,8 @@
 5
 1
-1 timberlake.cse.buffalo.edu 12345
-2 euston.cse.buffalo.edu 23456
-3 underground.cse.buffalo.edu 34567
-4 embankment.cse.buffalo.edu 45678
-5 highgate.cse.buffalo.edu 56789
+1 128.205.36.8 12345
+2 128.205.36.34 23456
+3 128.205.36.36 34567
+4 128.205.36.35 45678
+5 128.205.36.33 56789
 1 4 2
