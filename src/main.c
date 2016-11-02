@@ -3,19 +3,23 @@
 struct timeval timeout;
 FILE *topology;
 packet pack;
-sock temp;
+sock temp,svSock;
 top info;
+fd_set readfds,tempfds;
 //__________Main________________//
 //________________________________//
 char buf[MAX_LINE];
 char getip[INET_ADDRSTRLEN];
-char gethost[MAX_HOST];
+char findip[INET_ADDRSTRLEN];
+char findhost[MAX_HOST];
+char* command;
 char** tokens;
 //__________BUFFER______________//
 //_______________________________//
 int Num_conn;
+int time;
 unsigned int numTok;
-int my_id;
+int my_id=0;
 socklen_t sock_len = sizeof(temp.sock_info);
 //__________VARIABLES______________//
 char* getIP() {
@@ -37,18 +41,18 @@ char* findIP(char* hostname){
 	struct hostent *h;
 	if((h = gethostbyname(hostname)) ==NULL){
 		herror("Cannot resolve IP from hostname..");
-		sprintf(getip,"NA");
-		return getip;
+		sprintf(findip,"NA");
+		return findip;
 	}
 	memcpy(&temp.sock_info.sin_addr, h->h_addr_list[0], h->h_length);
-	inet_ntop(AF_INET, &temp.sock_info.sin_addr, getip, INET_ADDRSTRLEN);
-	return getip;
+	inet_ntop(AF_INET, &temp.sock_info.sin_addr, findip, INET_ADDRSTRLEN);
+	return findip;
 }
 // will return hostname from IP address and save to getip
 char* findHost(struct sockaddr_in addr){
 	struct sockaddr_in t_addr = addr;
-	getnameinfo((struct sockaddr*)&t_addr, sock_len, gethost, sizeof(gethost),NULL,0,0);
-	return gethost;
+	getnameinfo((struct sockaddr*)&t_addr, sock_len, findhost, sizeof(findhost),NULL,0,0);
+	return findhost;
 }
 //get host name based on IP String
 int isValidIP(char *ip){
@@ -71,24 +75,39 @@ void sortConnInfo(connection c[]){
 	}
 }
 //sorting conn_info in order of dst O(N^2) doesn matter in this case because number is small
-void syncTable(FILE* top){
+void printTopology(){
+	sortConnInfo(info.conn_info);
+	//sort topology before printout
+	int i;
+	printf("Number of servers: %d\nNumber of Connction: %d\n",info.num_serv ,info.num_conn);
+	for(i =0; i< info.num_serv; i++){
+		printf("SERVER- id:%d, ip:%s, port:%d\n",info.serv_info[i].id,info.serv_info[i].ip,info.serv_info[i].port);
+	}
+	for(i=0; i< info.num_serv; i++){
+		printf("Connection- src:%d, dst:%d, metric:%d\n",info.conn_info[i].src,info.conn_info[i].dst,info.conn_info[i].metric);
+	}
+	//testing
+}
+//print out current topology table
+void syncTable(FILE *top){
 	int i;
 	rewind(top);
-	//heading beginning of the fil
+	//heading beginning of the file
 	fprintf(top, "%d\n%d\n",info.num_serv, info.num_conn);
-	//num_conn -1 because it was added for self connection
+	printf("%d is current num_conn\n",info.num_conn);
 	for(i =0; i<info.num_serv;i++){
 		fprintf(top, "%d %s %d\n",info.serv_info[i].id,\
 					  info.serv_info[i].ip,\
 					  info.serv_info[i].port);
 	}
-	for(i =1; i<info.num_serv; i++){
+	for(i =1; i<info.num_serv;i++){
 	   if(info.conn_info[i].metric != inf){
 		fprintf(top, "%d %d %d\n",info.conn_info[i].src,\
 					  info.conn_info[i].dst,\
 					  info.conn_info[i].metric);
-	   }
+	   } 
 	}
+	fprintf(top,"SUCCESS To doso\n");
 }
 //output the table to the topology file
 int top_validate(FILE *top){
@@ -117,10 +136,10 @@ int top_validate(FILE *top){
 		   if(isValidIP(tokens[1])) strncpy(info.serv_info[i].ip, tokens[1],INET_ADDRSTRLEN);
 		   else{
 			if(!findIP(tokens[1])){
-			   printf("Host | IP in topology is wrong\n");
-			   fclose(top);
-			   return 0;
-			}strncpy(info.serv_info[i].ip,getip,INET_ADDRSTRLEN);
+		   	   printf("Host | IP in topology is wrong\n");
+		      	   fclose(top);
+		      	   return 0;
+		   	}strncpy(info.serv_info[i].ip,findip,INET_ADDRSTRLEN);
 		   }
 		   //check if given string is valid ipform, ifnot
 		   //convert and save it!
@@ -134,6 +153,11 @@ int top_validate(FILE *top){
 			my_id = info.serv_info[i].id;
 		}
 		//Set my id number in the topology
+	}
+	if(!my_id){
+		printf("My id is not on the topology.. give me another topology\n");
+		fclose(top);
+		return 0;
 	}
 //_____________________________________________________________________________________________________//
 //____________________________________Reading for connection info______________________________________//
@@ -201,10 +225,87 @@ int top_validate(FILE *top){
 	      }
 	   }
 	}
-	sortConnInfo(info.conn_info);
 	//finding src-dst connection not on the topology file
 	//set cost inf(0xFFFF) to all connection not shown in topology
 	return 1;
+}
+int init(){
+	bzero(&svSock,sizeof(svSock));
+	if((svSock.sock = socket(AF_INET,SOCK_DGRAM,0))==-1){
+		perror("ERROR! CANT create socket:");
+		exit(1);
+	}
+	svSock.sock_info.sin_family = AF_INET;
+	svSock.sock_info.sin_port = htons(info.serv_info[my_id-1].port);
+	svSock.sock_info.sin_addr.s_addr= inet_addr(info.serv_info[my_id-1].ip);
+//	printf("%s is my ip %d my port\n",info.serv_info[my_id-1].ip,info.serv_info[my_id-1].port);
+	if((bind(svSock.sock,(struct sockaddr*)&svSock.sock_info, sock_len))==-1){
+		perror("ERROR! Cant bind:");
+		exit(1);
+	}	
+	printf("\nSUCCESS to init\n");
+}
+void runServ(){
+	int fd_count;
+	FD_SET(0,&readfds);
+	FD_SET(svSock.sock,&readfds);
+	//setting basic fd_set setting
+	while(1){
+	   fprintf(stderr,"PA2>");
+	   //printout terminal
+	   tempfds = readfds;
+	   timeout.tv_sec = time;
+	   //renew time clock! && renew fd_set
+	   fd_count = select(svSock.sock+1,&tempfds,NULL,NULL,&timeout);
+	   //if incoming data or keyboard input execute below!
+	   
+	   if(!fd_count){
+		 printf("send packets\n");
+	   }else{
+		while(fd_count-- > 0){
+//__________________________________________________________________________________________________________//
+//_______________________________keyboard input____________________________________________________________//
+		   if(FD_ISSET(0,&tempfds)){
+			command = readLine();
+			tokens = parseTok(command);
+			if(tokens[0]=='\0') continue;
+			if((strcasecmp(tokens[0],"update")==0)&&numTok==4){
+			}else if((strcasecmp(tokens[0],"step")==0)&&numTok==1){
+			}else if((strcasecmp(tokens[0],"packets")==0)&&numTok==1){
+			}else if((strcasecmp(tokens[0],"display")==0)&&numTok==1){
+				printTopology();
+			}else if((strcasecmp(tokens[0],"disable")==0)&&numTok==2){
+				int dst = atoi(tokens[1]);
+				//parse given input 
+				if(dst && dst < NUM_SERVER && dst != info.conn_info[dst-1].src){
+				//to update cost value of given server id given dst id should be
+				//	1. dst should be larger than 0
+				//	2. dst should be less than total number of server
+				//	3. dst should not be same as src - cannot update loopback
+				  if(info.conn_info[dst-1].metric != inf){
+				  // if connection is already disabled, skip changing value
+					info.conn_info[dst-1].metric = inf;
+					info.num_conn--;
+					syncTable(topology);
+					printf("%s SUCCESS\n",tokens[0]);
+				  }
+				  else printf("connection to given server ID is already disabled\n");
+				}else{
+				   printf("server ID is not valie\n");
+				}
+			}else if((strcasecmp(tokens[0],"crash")==0)&&numTok==1){
+			}else printf(USAGE);
+//________________________________________________________________________________________________________//
+//_______________________________Incoming packet_________________________________________________________//
+		   }else if(FD_ISSET(svSock.sock,&tempfds)){
+//________________________________________________________________________________________________________//
+//_______________________________COMPROMISED-impossible case______________________________________________//
+		   }else{
+			printf("I am under attack! HELP!!\n");	
+		   }
+		}
+	   }
+	}
 }
 int main(int argc, char* argv[]){
 	if(argc != 5){
@@ -212,7 +313,7 @@ int main(int argc, char* argv[]){
 	//print error if it comes short of number of arguments
 	}else{
 		if(strcmp("-i",argv[3])==0 && strcmp("-t",argv[1])==0){
-		   if(atoi(argv[4])) timeout.tv_sec = atoi(argv[4]);
+		   if(atoi(argv[4])) time = atoi(argv[4]);
 		   else{
 			printf("please give right time interval!\n");
 			exit(1);
@@ -235,19 +336,14 @@ int main(int argc, char* argv[]){
 		  //test max connection
 		  bzero(&pack, sizeof(pack));
 		  bzero(&info, sizeof(info));
+		  FD_ZERO(&readfds);
 		  //init for packet struct 
-		  if(top_validate(topology)){
-		   //test if topology contains correct data
-		  printf("Numserv: %d\nNumCOnn: %d\n",NUM_SERVER ,Num_conn);
-		  for(i =0; i< info.num_serv; i++){
-			printf("SERVER- id:%d, ip:%s, port:%d\n",info.serv_info[i].id,info.serv_info[i].ip,info.serv_info[i].port);
-		  }
-		  for(i=0; i< info.num_serv; i++){
-			printf("TOPOLOGY- src:%d, dst:%d, metric:%d\n",info.conn_info[i].src,info.conn_info[i].dst,info.conn_info[i].metric);
-		  }
-		  //testing
-		  syncTable(topology);
-		  }
+		  if(top_validate(topology) && init()){
+		  //test if topology contains correct data
+			printTopology();
+			syncTable(topology);
+			runServ();
+		  }	
 		}else{
 			printf(PROC_USAGE);
 		}

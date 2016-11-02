@@ -14,6 +14,7 @@
 #include <netdb.h>
 
 #define PROC_USAGE "\nYour input arguments are wrong...\nPlease follow the format\n\n ./PA1 -t [filename] -i [Interval]\n\n"
+#define USAGE "\n[USAGE]\nupdate <server-ID1> <server-ID2> <Link Cost>\n   - this will update cost of two machines in  local topology\nstep\n   - send routing update to neighbors now!\npackets\n   - display the number of distance vector packets this server has received since the last invocation of this information\ndisplay\n   - display the current routing table! dst ids are sorted\ndisable <server-ID>\n   - disable the link to a given server ID, basically will set cost to infinite cost\ncrash\n   - Close all connection...\n"
 #define MAX_LINE 128
 #define MAX_INPUT 60
 #define MAX_HOST 64
