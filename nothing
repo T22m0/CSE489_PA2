@@ -1,0 +1,24 @@
+void syncTable(FILE *top){
+	int i;
+	rewind(top);
+	//fseek(top,0,SEEK_SET);
+	//heading beginning of the file
+	fprintf(top,"%d\n%d\n",info.num_serv, info.num_conn);
+	printf("%d is current num_conn\n",info.num_conn);
+	for(i =0; i<info.num_serv;i++){
+		fprintf(top, "%d %s %d\n",info.serv[i].id,\
+					  info.serv[i].ip,\
+					  info.serv[i].port);
+	}
+	for(i =1; i<info.num_serv;i++){
+	   if(info.conn[i].metric != inf){
+		fprintf(top, "%d %d %d\n",info.conn[i].src,\
+					  info.conn[i].dst,\
+					  info.conn[i].metric);
+	   } 
+	}
+	fprintf(top,"SUCCESS To doso\n");
+} 
+//output the table to the topology file
+//no need this function...
+

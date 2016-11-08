@@ -19,12 +19,15 @@
 #define MAX_INPUT 60
 #define MAX_HOST 64
 #define MAX_TOK 5
+#define MAX_WAIT 3
 #define NUM_SERVER 5
 #define inf 0xFFFF
+#define ip_inf 0xFFFFFFFF
 #define zero 0x0000
 extern unsigned int numTok;
 extern int Num_conn;
-
+//____________________________________________//
+//______________Routing table structure______//
 typedef struct{
 	int id;
 	char ip[INET_ADDRSTRLEN];
@@ -40,10 +43,14 @@ typedef struct{
 typedef struct{
 	int num_serv;
 	int num_conn;
-	server serv_info[NUM_SERVER];
-	connection conn_info[NUM_SERVER];
+	server serv[NUM_SERVER];
+	connection conn[NUM_SERVER];
+	int neig[NUM_SERVER];
 }top;
+//______________________________________________//
 
+//_______________________________________________//
+//_______________update packet structure________//
 typedef struct{
 	 uint16_t num_update;
 	 uint16_t srv_port;
@@ -52,8 +59,10 @@ typedef struct{
 	 uint16_t srvportn[NUM_SERVER];
 	 uint16_t pad[NUM_SERVER];
 	 uint16_t idn[NUM_SERVER];	
-	 uint16_t metrix[NUM_SERVER];
+	 uint16_t metric[NUM_SERVER];
 }packet;
+//______________________________________________//
+
 typedef struct{
 	int sock;
 	struct sockaddr_in sock_info;

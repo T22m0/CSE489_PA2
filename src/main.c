@@ -2,13 +2,14 @@
 //______________________________//
 struct timeval timeout;
 FILE *topology;
-packet pack;
+packet pack,pack_income;
 sock temp,svSock;
-top info;
+top info,info_check;
 fd_set readfds,tempfds;
 //__________Main________________//
 //________________________________//
 char buf[MAX_LINE];
+char ans[MAX_INPUT];
 char getip[INET_ADDRSTRLEN];
 char findip[INET_ADDRSTRLEN];
 char findhost[MAX_HOST];
@@ -16,9 +17,7 @@ char* command;
 char** tokens;
 //__________BUFFER______________//
 //_______________________________//
-int Num_conn;
-int time;
-int packets;
+int Num_conn, time, packets, update, neighbor;
 unsigned int numTok;
 int my_id=0;
 socklen_t sock_len = sizeof(temp.sock_info);
@@ -35,6 +34,7 @@ char* getIP() {
 	if((connect(temp.sock, (struct sockaddr*)&temp.sock_info, sock_len)) == -1) perror("CANNOT GET MY IP:");
 	if((getsockname(temp.sock, (struct sockaddr*)&temp.sock_info,&sock_len)) == -1) perror("CanNOT GET SOCK INFO");
 	inet_ntop(AF_INET, &temp.sock_info.sin_addr, getip, INET_ADDRSTRLEN);
+	close(temp.sock);
 	return getip;
 }
 //get public ip using UDP connection USE GOOGLE DNS server 
@@ -62,57 +62,6 @@ int isValidIP(char *ip){
 	return result != 0;
 }
 //to determine if given string is IPaddress
-void sortConnInfo(connection c[]){
-	int i,j;
-	connection temp;
-	for(i=0; i<info.num_serv; i++){	     
-	   for(j=i+1; j<info.num_serv; j++){
-      	     if(info.conn_info[i].dst > info.conn_info[j].dst){
-		temp = info.conn_info[i];
-		info.conn_info[i]=info.conn_info[j];
-		info.conn_info[j]=temp;	
-	     }
-	   }  	
-	}
-}
-//sorting conn_info in order of dst O(N^2) doesn matter in this case because number is small
-void printTopology(){
-	sortConnInfo(info.conn_info);
-	//sort topology before printout
-	int i;
-	printf("[Number of servers]: %d\n[Number of Connction]: %d\n",info.num_serv ,info.num_conn);
-	for(i =0; i< info.num_serv; i++){
-		printf("[SERVER] id:%d, ip:%s, port:%d\n",info.serv_info[i].id,info.serv_info[i].ip,info.serv_info[i].port);
-	}
-	for(i=0; i< info.num_serv; i++){
-		printf("[Connection] src:%d, dst:%d, metric:%d\n",info.conn_info[i].src,info.conn_info[i].dst,info.conn_info[i].metric);
-	}
-	//testing
-}
-//print out current topology table
-/*void syncTable(FILE *top){
-	int i;
-	rewind(top);
-	//fseek(top,0,SEEK_SET);
-	//heading beginning of the file
-	fprintf(top,"%d\n%d\n",info.num_serv, info.num_conn);
-	printf("%d is current num_conn\n",info.num_conn);
-	for(i =0; i<info.num_serv;i++){
-		fprintf(top, "%d %s %d\n",info.serv_info[i].id,\
-					  info.serv_info[i].ip,\
-					  info.serv_info[i].port);
-	}
-	for(i =1; i<info.num_serv;i++){
-	   if(info.conn_info[i].metric != inf){
-		fprintf(top, "%d %d %d\n",info.conn_info[i].src,\
-					  info.conn_info[i].dst,\
-					  info.conn_info[i].metric);
-	   } 
-	}
-	fprintf(top,"SUCCESS To doso\n");
-}*/ 
-//output the table to the topology file
-//no need this function...
 int check_id(int i){
 	return (1<=i)&&(i<=info.num_serv);
 }
@@ -120,12 +69,57 @@ int check_id(int i){
 int check_cost(uint16_t i){
 	return (zero<i)&&(i<=inf);
 }
+int check_update(){
+	update = 0;
+	int i;
+	if(info.num_conn != info_check.num_conn) update++;
+	//printf("%d update, %d info, %d info_check \n", update,info.num_conn, info_check.num_conn);
+	for(i = 0; i < info.num_serv; i++){
+		if(info.conn[i].src==info_check.conn[i].dst) continue;
+	//printf("%d update, %d info metric, %d info_check metric\n", update, info.conn[i].metric, info_check.conn[i].metric);
+		if(info.conn[i].metric != info_check.conn[i].metric) update++;
+	}
+	return update;
+}
 //cost should be larger than zero, and less than 0xFFFF
+void sortConnInfo(connection c[]){
+	int i,j;
+	connection temp;
+	for(i=0; i<info.num_serv; i++){	     
+	   for(j=i+1; j<info.num_serv; j++){
+      	     if(info.conn[i].dst > info.conn[j].dst){
+		temp = info.conn[i];
+		info.conn[i]=info.conn[j];
+		info.conn[j]=temp;	
+	     }
+	   }  	
+	}
+}
+//sorting conn in order of dst O(N^2) doesn matter in this case because number is small
+void printTopology(){
+	sortConnInfo(info.conn);
+	//sort topology before printout
+	int i;
+	printf("[Number of servers]: %d\n[Number of Connction]: %d\n\n",info.num_serv ,info.num_conn);
+	for(i =0; i< info.num_serv; i++){
+		printf("[SERVER%d] id:%d, ip:%s, port:%d\n",i+1,info.serv[i].id,info.serv[i].ip,info.serv[i].port);
+	}printf("\n");
+	for(i=0; i< info.num_serv; i++){
+		printf("[Connection%d] src:%d, dst:%d, metric:%d\n",i+1,info.conn[i].src,info.conn[i].dst,info.conn[i].metric);
+	}printf("\n");
+	for(i=0; i< info.num_serv; i++){
+		printf("[Neighbor%d] %d\n",i+1,info.neig[i]);
+	}
+	//testing
+}
+//print out current topology table
 int top_validate(FILE *top){
 	int i;
 	//index int
 	getIP();
 	//get ip of current machine
+	bzero(&info, sizeof(info));
+	//init for packet struct 
 	info.num_serv = NUM_SERVER;
 	info.num_conn = Num_conn;
 	//set initial numbers
@@ -141,16 +135,17 @@ int top_validate(FILE *top){
 			return 0;
 		}
 		//exit if it has less than 3 tokens
-		if((info.serv_info[i].id = atoi(tokens[0]))\
-	        && (info.serv_info[i].port=atoi(tokens[2]))){
+		info.serv[i].id = atoi(tokens[0]);
+	        info.serv[i].port=atoi(tokens[2]);
+		if(info.serv[i].id && info.serv[i].port){
 		//if id and port is not 0, it is in right format
-		   if(isValidIP(tokens[1])) strncpy(info.serv_info[i].ip, tokens[1],INET_ADDRSTRLEN);
+		   if(isValidIP(tokens[1])) strncpy(info.serv[i].ip, tokens[1],INET_ADDRSTRLEN);
 		   else{
 			if(!findIP(tokens[1])){
 		   	   printf("Host | IP in topology is wrong\n");
 		      	   fclose(top);
 		      	   return 0;
-		   	}strncpy(info.serv_info[i].ip,findip,INET_ADDRSTRLEN);
+		   	}strncpy(info.serv[i].ip,findip,INET_ADDRSTRLEN);
 		   }
 		   //check if given string is valid ipform, ifnot
 		   //convert and save it!
@@ -160,8 +155,8 @@ int top_validate(FILE *top){
 			return 0;
 		}
 		//if id or port contains 0 value or string..
-		if(strcmp(getip,info.serv_info[i].ip)==0){
-			my_id = info.serv_info[i].id;
+		if(strcmp(getip,info.serv[i].ip)==0){
+			my_id = info.serv[i].id;
 		}
 		//Set my id number in the topology
 	}
@@ -195,11 +190,13 @@ int top_validate(FILE *top){
 			return 0;
 		}
 		//if my_id is not in either src or dst, this is not my topology
-		info.conn_info[i].src = my_id;
+		info.conn[i].src = my_id;
 		//if there exists my id in link, set src my id
-		my_id == num1 ? (info.conn_info[i].dst = num2) : (info.conn_info[i].dst = num1);
+		my_id == num1 ? (info.conn[i].dst = num2) : (info.conn[i].dst = num1);
 		//if my_id is same as num1, then dst is num2 or it is num1;
-		if((num1!=num2)&&!(info.conn_info[i].metric = atoi(tokens[2]))){
+		info.neig[info.conn[i].dst-1] = 1;
+		//record my neighbor routers
+		if((num1!=num2)&&!(info.conn[i].metric = atoi(tokens[2]))){
 		// cost of connection except loopback should be larger than 0!
 			printf("Cost should be larger than 0!!\n");
 			fclose(top);
@@ -216,22 +213,22 @@ int top_validate(FILE *top){
 	}
 	//init for 0 to Num_conn	
 	for(i =info.num_conn; i<info.num_serv; i++){
-		info.conn_info[i].src = my_id;
-		info.conn_info[i].metric = inf;
+		info.conn[i].src = my_id;
+		info.conn[i].metric = inf;
 	}
 	//givine all infinite value
 	for(i=1; i<=info.num_serv; i++){
 	//for tracking empty dst
 	   int j;
     	   for(j=0; j<info.num_serv; j++){
-	   //searching for conn_info.dst,
-	    if(info.conn_info[j].dst == i) break;
+	   //searching for conn.dst,
+	    if(info.conn[j].dst == i) break;
 	    //if dst value is already took place, skip this dst value.
-	      if(info.conn_info[j].dst==0){
+	      if(info.conn[j].dst==0){
 	      //else i is not used and found empty dst value
-		info.conn_info[j].dst = i; 
+		info.conn[j].dst = i; 
 		//set it with value of i
-	        if(info.conn_info[j].src == info.conn_info[j].dst) info.conn_info[j].metric=zero;
+	        if(info.conn[j].src == info.conn[j].dst) info.conn[j].metric=zero;
 		//if connecting myself, give metric zero(0x0000)
 		break;
 	      }
@@ -240,45 +237,116 @@ int top_validate(FILE *top){
 	//finding src-dst connection not on the topology file
 	//set cost inf(0xFFFF) to all connection not shown in topology
 	printf("\n_-_-_-_-_-SUCCESS to parse Topology-_-_-_-_-_\n");
-	sleep(2);
+	sleep(1);
 	return 1;
 }
 int init(){
 	packets =0;
-	//initialize packets variable
+	update = 0;
+	bzero(&pack, sizeof(pack));
 	bzero(&svSock,sizeof(svSock));
+	FD_ZERO(&readfds);
+	//initialize all necessary variables
+	// count of packets, update, zeroing -[packet structure, socket structure and fd_set]
 	if((svSock.sock = socket(AF_INET,SOCK_DGRAM,0))==-1){
 		perror("ERROR! CANT create socket:");
 		return 0;
 	}
+	//make udp socket
 	svSock.sock_info.sin_family = AF_INET;
-	svSock.sock_info.sin_port = htons(info.serv_info[my_id-1].port);
-	svSock.sock_info.sin_addr.s_addr= inet_addr(info.serv_info[my_id-1].ip);
-//	printf("%s is my ip %d my port\n",info.serv_info[my_id-1].ip,info.serv_info[my_id-1].port);
+	svSock.sock_info.sin_port = htons(info.serv[my_id-1].port);
+	svSock.sock_info.sin_addr.s_addr= inet_addr(info.serv[my_id-1].ip);
+	//printf("%s is my ip %d my port\n",info.serv[my_id-1].ip,info.serv[my_id-1].port);
 	if((bind(svSock.sock,(struct sockaddr*)&svSock.sock_info, sock_len))==-1){
 		perror("ERROR! Cant bind:");
 		return 0;
-	}	
-	printf("\n_-_-_-_-_-SUCCESS to Bind socket__-_-_-_-_\n");
-	sleep(2);
+	}
+	//bind the socket	
+	timeout.tv_sec = MAX_WAIT;
+	if(setsockopt(svSock.sock,SOL_SOCKET, SO_RCVTIMEO,&timeout,sizeof(timeout))<0){
+		perror("socket setting error! ");
+		return 0;
+	}
+	//setting socket to wait on receiving for MAX_WAIT seconds - 3 seconds in this case
+	timeout.tv_sec = time;
+	//setting time out for step() method
+	printf("\n_-_-_-_-_-SUCCESS to Bind socket-_-_-_-_-_\n");
+	sleep(1);
 	return 1;
+}
+
+void makePacket(){
+	int i;
+	pack.num_update = check_update();
+	pack.srv_port = inf & info.serv[my_id-1].port;
+	pack.srv_ip= ip_inf & inet_addr(info.serv[my_id-1].ip);
+	//printf("%d update \n%d server port\n%d server IP\n",update,pack.srv_port, pack.srv_ip);
+	for(i = 0; i < info.num_serv; i++){
+		pack.srvip_n[i]=ip_inf & inet_addr(info.serv[i].ip);
+		pack.srvportn[i]= info.serv[i].port;
+	      //pack.pad[i] = do nothing
+	        pack.idn[i] = info.serv[i].id;
+		pack.metric[i] = info.conn[i].metric;
+		//printf("\n%dTh info %d-server ip %d-server port %d-server pad %d-server id %d-server metric \n",i,pack.srvip_n[i],pack.srvportn[i],pack.pad[i],pack.idn[i],pack.metric[i]);
+	}
+	printf("Success to make a packet\n");
+}
+
+int step(){
+	int i;
+	neighbor=0;
+	//init neighbor to 0
+	makePacket();
+	//make packet
+	for(i =0; i< info.num_serv; i++){
+	   if((info.neig[i]) && (info.conn[i].metric!=inf)){	
+	//search my neighbors to send the packet
+		temp.sock_info.sin_port = htons(info.serv[i].port);
+		temp.sock_info.sin_addr.s_addr=inet_addr(info.serv[i].ip);
+		//set info of neighbors to temp socket
+		printf("__________________________________________\n");
+		printf("gonna send..\n");
+		sendto(svSock.sock, &pack, sizeof(pack),0,(struct sockaddr*) &temp.sock_info, sock_len);
+		printf("now receiving..\n");
+		recvfrom(svSock.sock,ans,MAX_INPUT,0,(struct sockaddr*)&temp.sock_info,&sock_len);
+		if(strcmp(ans,"received")==0) neighbor++;
+		else 
+		//and send the data through my socket
+		printf("received the responce!: %s\n",ans);
+		printf("__________________________________________\n");
+	   }
+	}
+	info_check = info;
+	if(!neighbor){
+		return 0;
+	}
+	//then renew my info
+	return 1;
+}
+//method to send the packet to only neighbors
+void compare(){
+
 }
 void runServ(){
 	int fd_count;
 	FD_SET(0,&readfds);
 	FD_SET(svSock.sock,&readfds);
 	//setting basic fd_set setting
+	info_check = info;
+	//save current info table.
+ 	//saved table will be used to check update!
 	while(1){
 	   fprintf(stderr,"PA2>");
 	   //printout terminal
 	   tempfds = readfds;
-	   timeout.tv_sec = time;
+
 	   //renew time clock! && renew fd_set
 	   fd_count = select(svSock.sock+1,&tempfds,NULL,NULL,&timeout);
 	   //if incoming data or keyboard input execute below!
-	   
 	   if(!fd_count){
-		 printf("send packets\n");
+		if(step()) printf("packet broadcasted\n)");
+		else printf("no neighbor is up!\n");
+		timeout.tv_sec = time;
 	   }else{
 		while(fd_count-- > 0){
 //__________________________________________________________________________________________________________//
@@ -300,19 +368,23 @@ void runServ(){
 				      if(num1!=num2){
 				      // check if the usier tries to change cost for looopback
 				        int cur_cost;
-					my_id == num1 ? (cur_cost = info.conn_info[num2-1].metric) : (cur_cost = info.conn_info[num1-1].metric);
+					my_id == num1 ? (cur_cost = info.conn[num2-1].metric) : (cur_cost = info.conn[num1-1].metric);
 					// save cost value for update-to-same-cost case
 					if(cur_cost != metric){
-					// check if cost for update is same as current cost
-					   my_id == num1 ? (info.conn_info[num2-1].metric=metric) : (info.conn_info[num1-1].metric=metric);
-				   	   metric == inf ? info.num_conn-- : info.num_conn++;
-					   // if metric is inf, it is the case same as disable. or it is enabling connection between two hosts
+					// check if cost for update is same as current costi
+					   my_id == num1 ? (info.conn[num2-1].metric=metric) : (info.conn[num1-1].metric=metric);
+				   	   metric == inf ? info.num_conn-- : (cur_cost==inf) ? info.num_conn++ : (info.num_conn+=0);
+					   // if metric is inf, it is the case same as disable.
+					   // but metric is not inf and cur_cost was inf, it is enabling a route
+					   // but metric is ont inf and cur_cost is not inf too it is just change of value. so leave it
 					   printf("<%s> SUCCESS!\n",tokens[0]);
 					}else printf("<%s> The cost is already set to the value! no need to update\n",tokens[0]);
 				      }else printf("<%s> you cannot update cost for loopback!\n",tokens[0]);
 				   }else printf("<%s> Your arguments does not contain id of current machine!\n",tokens[0]);					
 				}else printf("<%s> Please check arguments for update!\n",tokens[0]);
 			}else if((strcasecmp(tokens[0],"step")==0)&&numTok==1){
+				if(step()) printf("<%s> SUCCESS\n",tokens[0]);
+				else printf("<%s> No neighbor is up near me..\n",tokens[0]);
 			}else if((strcasecmp(tokens[0],"packets")==0)&&numTok==1){
 				packets = 0;
 			}else if((strcasecmp(tokens[0],"display")==0)&&numTok==1){
@@ -321,14 +393,14 @@ void runServ(){
 			}else if((strcasecmp(tokens[0],"disable")==0)&&numTok==2){
 				int dst = atoi(tokens[1]);
 				//parse given input 
-				if(dst && dst < NUM_SERVER && dst != info.conn_info[dst-1].src){
+				if(dst && dst < NUM_SERVER && dst != info.conn[dst-1].src){
 				//to update cost value of given server id given dst id should be
 				//	1. dst should be larger than 0
 				//	2. dst should be less than total number of server
 				//	3. dst should not be same as src - cannot update loopback
-				    if(info.conn_info[dst-1].metric != inf){
+				    if(info.conn[dst-1].metric != inf){
 				    // if connection is already disabled, skip changing value
-					info.conn_info[dst-1].metric = inf;
+					info.conn[dst-1].metric = inf;
 					info.num_conn--;
 					printf("<%s> SUCCESS\n",tokens[0]);
 				    }
@@ -337,10 +409,38 @@ void runServ(){
 				   printf("<%s> server ID is not valie\n",tokens[0]);
 				}
 			}else if((strcasecmp(tokens[0],"crash")==0)&&numTok==1){
+				int i;
+				close(svSock.sock);
+				//disable my only socket.. cannot receive or send any data from now
+				printf("Closed Datagram socket\n");
+				
+				info.num_conn=0;
+				for(i = 0; i<info.num_serv; i++){
+					info.conn[i].metric = inf;
+					info.neig[i] = zero;
+				}
+				//wipe out all neighbor data
+
+				printf("Disconnected all connction\n");
+				printTopology();
+				printf("<%s> SUCCESS\n",tokens[0]);
+				exit(1);
 			}else printf(USAGE);
 //________________________________________________________________________________________________________//
 //_______________________________Incoming packet_________________________________________________________//
 		   }else if(FD_ISSET(svSock.sock,&tempfds)){
+			printf("****************************************\n");
+			recvfrom(svSock.sock, &pack_income, sizeof(pack_income),0,(struct sockaddr*)&temp.sock_info,&sock_len);
+			printf("i got a packet from neighbor\n");
+			sendto(svSock.sock,"received",strlen("received"),0,(struct sockaddr*)&temp.sock_info,sock_len);
+			printf("send the reply to sender\n");
+			printf("***************************************\n");
+			compare();	
+
+			/*printf("%d update \n%d server port\n%d server IP\n",update,pack_income.srv_port, pack_income.srv_ip);
+			int i;
+			for(i = 0; i< info.num_serv; i++){
+			printf("\n%dTh info %d-server ip %d-server port %d-server pad %d-server id %d-server metric \n",i,pack_income.srvip_n[i],pack_income.srvportn[i],pack_income.pad[i],pack_income.idn[i],pack_income.metric[i]);}*/
 //________________________________________________________________________________________________________//
 //_______________________________COMPROMISED-impossible case______________________________________________//
 		   }else{
@@ -377,10 +477,6 @@ int main(int argc, char* argv[]){
 		 exit(1);
 	      }
 	      //test max connection
-	      bzero(&pack, sizeof(pack));
-	      bzero(&info, sizeof(info));
-	      FD_ZERO(&readfds);
-	      //init for packet struct 
 	      if(top_validate(topology) && init()){
 	      //test if topology contains correct data
 	 	 if(fclose(topology)!=0){
