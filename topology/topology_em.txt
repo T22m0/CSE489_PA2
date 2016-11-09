@@ -1,0 +1,9 @@
+5
+2
+1 timberlake.cse.buffalo.edu 65432
+2 metallica.cse.buffalo.edu 54321
+3 embankment.cse.buffalo.edu 43210
+4 underground.cse.buffalo.edu 32109
+5 highgate.cse.buffalo.edu 21098
+3 5 10
+3 2 2
