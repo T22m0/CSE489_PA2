@@ -125,6 +125,7 @@ void update_table(){
 	int num_chg = pack_income.num_update;
 	//total number of update
 	int sender_id = searchId(findip);
+	if(info.neig[sender_id]) info.neig[sender_id]=1;
 	//sender id of my list
 	//temp.sock_info.sin_addr.s_addr = pack_income.srv_ip;
 	//char* sender_ip = inet_ntoa(temp.sock_info.sin_addr);
@@ -151,11 +152,23 @@ void update_table(){
 	   //compare the metric of his metric and my metric
 	   //if my metric is larger, syncronize the metric to smaller one 
 	   }else if(info.conn[my_tmp_idn].metric == inf && tmp_metric < inf){
-		info.conn[my_tmp_idn].metric = info.conn[sender_id].metric + tmp_metric;
-		if(!(--num_chg)) break;
+		if(!info.neig[my_tmp_idn]){
+   			info.conn[my_tmp_idn].metric = info.conn[sender_id].metric + tmp_metric;
+			info.num_conn++;
+			if(!(--num_chg)) break;
+		}
 	   //if metric in my table is inf and not in income packet,
-	   //simply update the value now it is up!
+	   //and givem id is not my neighbor 
+	   //simply update the value now it is up
 	   //and decrease num_chg
+	   }else if(info.conn[my_tmp_idn].metric <inf && tmp_metric ==inf){
+		if(!info.neig[my_tmp_idn]){
+			info.conn[my_tmp_idn].metric = inf;
+			info.num_conn--;
+			if(!(--num_chg)) break;
+		}
+	   // if my metric is not inf but not in income packet,
+	   // and if it is not my neighbor just disconnect it
 	   }else if(info.conn[my_tmp_idn].metric < inf && tmp_metric < inf){
 		if(info.conn[my_tmp_idn].metric > info.conn[sender_id].metric+tmp_metric){
 			info.conn[my_tmp_idn].metric = info.conn[sender_id].metric + tmp_metric;
@@ -356,7 +369,7 @@ int step(){
 	//make packet
 	for(i =0; i< info.num_serv; i++){
 	   if((info.neig[i]) && (info.conn[i].metric!=inf)){	
-	//search my neighbors to send the packet
+	   //search my neighbors to send the packet
 		temp.sock_info.sin_port = htons(info.serv[i].port);
 		temp.sock_info.sin_addr.s_addr=inet_addr(info.serv[i].ip);
 		//set info of neighbors to temp socket
@@ -364,23 +377,25 @@ int step(){
 		printf("gonna send..\n");
 		sendto(svSock.sock, &pack, sizeof(pack),0,(struct sockaddr*) &temp.sock_info, sock_len);
 		printf("now receiving..\n");
+		ans[0] = '\0';
 		recvfrom(svSock.sock,ans,MAX_INPUT,0,(struct sockaddr*)&temp.sock_info,&sock_len);
-
-		if(strcmp(ans,"received")==0){
+		if(strcmp(ans,"receive")==0){
 		//if host is alive, I would get the receive the answer from the other server
 			neighbor++;
 			//so record the that i succefully send the packet
 			info.neig[i] = 1;
 			//now i know my neighbor is alive!
+			printf("recived from server : %s with port :%d \n",inet_ntoa(temp.sock_info.sin_addr),ntohs(temp.sock_info.sin_port));
 			printf("received the responce!: %s\n",ans);
 		}else{
 			info.neig[i]++;
+			printf("what is happening %s is received\n",ans);
 			//record if I did not get the message from the server
-			if(info.neig[i] == 4){
+			if(info.neig[i] >= 4){
 				info.conn[i].metric = inf;
-				printf("It seems server[%d] is dead..The cost will be set to infinity now\n",i);
-			}
-			
+				info.num_conn--;
+				printf("It seems server[%d] is dead..The cost will be set to infinity now\n",i+1);
+			}	
 			//if it is 3rd time that i missed the packet, 
 			//consider it is dead now, and set metric to inf
 		}
@@ -389,11 +404,12 @@ int step(){
 	   }
 	}
 	info_check = info;
+	timeout.tv_sec = time;
 	//since I updated packet and successfully send it to other neighbors, 
 	//update the info packet
 	if(!neighbor) return 0;	
+	else return 1;
 	//then renew my info
-	return 1;
 }
 //method to send the packet to only neighbors
 void runServ(){
@@ -415,7 +431,6 @@ void runServ(){
 	   if(!fd_count){
 		if(step()) printf("packet broadcasted\n)");
 		else printf("no neighbor is up!\n");
-		timeout.tv_sec = time;
 	   }else{
 		while(fd_count-- > 0){
 //__________________________________________________________________________________________________________//
@@ -469,16 +484,15 @@ void runServ(){
 				//	1. dst should be larger than 0
 				//	2. dst should be less than total number of server
 				//	3. dst should not be same as src - cannot update loopback
-				    if(info.conn[dst-1].metric != inf){
-				    // if connection is already disabled, skip changing value
-					info.conn[dst-1].metric = inf;
-					info.num_conn--;
-					printf("<%s> SUCCESS\n",tokens[0]);
-				    }
-				    else printf("<%s> connection to given server ID is already disabled\n",tokens[0]);
-				}else{
-				   printf("<%s> server ID is not valie\n",tokens[0]);
-				}
+				    if(!info.neig[dst-1]){
+					if(info.conn[dst-1].metric != inf){
+					// if connection is already disabled, skip changing value
+					    info.conn[dst-1].metric = inf;
+					    info.num_conn--;
+					    printf("<%s> SUCCESS\n",tokens[0]);
+				        } else printf("<%s> connection to given server ID is already disabled\n",tokens[0]);
+				    }else printf("<%s> you are trying to disable neighbor!!\n",tokens[0]);
+				}else printf("<%s> server ID is not valie\n",tokens[0]);
 			}else if((strcasecmp(tokens[0],"crash")==0)&&numTok==1){
 				int i;
 				close(svSock.sock);
@@ -494,15 +508,14 @@ void runServ(){
 				printf("Disconnected all connction\n");
 				printTopology();
 				printf("<%s> SUCCESS\n",tokens[0]);
-				exit(1);
 			}else printf(USAGE);
 //________________________________________________________________________________________________________//
 //_______________________________Incoming packet_________________________________________________________//
 		   }else if(FD_ISSET(svSock.sock,&tempfds)){
 			printf("\n****************************************\n");
 			if(recvfrom(svSock.sock, &pack_income, sizeof(pack_income),0,(struct sockaddr*)&temp.sock_info,&sock_len)>0) packets++;
-			printf("i got a packet From server ID:[%d]\n",searchId(findIP(findHost(temp.sock_info))));
-			sendto(svSock.sock,"received",strlen("received"),0,(struct sockaddr*)&temp.sock_info,sock_len);
+			printf("i got a packet From server ID:[%d]\n",searchId(findIP(findHost(temp.sock_info)))+1);
+			sendto(svSock.sock,"receive",strlen("receive"),0,(struct sockaddr*)&temp.sock_info,sock_len);
 			printf("send the reply to sender\n");
 			printf("***************************************\n");
 			update_table();
