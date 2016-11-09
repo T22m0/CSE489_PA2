@@ -19,10 +19,9 @@
 #define MAX_INPUT 60
 #define MAX_HOST 64
 #define MAX_TOK 5
-#define MAX_WAIT 3
+#define MAX_WAIT 2
 #define NUM_SERVER 5
 #define inf 0xFFFF
-#define ip_inf 0xFFFFFFFF
 #define zero 0x0000
 extern unsigned int numTok;
 extern int Num_conn;
@@ -52,14 +51,18 @@ typedef struct{
 //_______________________________________________//
 //_______________update packet structure________//
 typedef struct{
+	 uint32_t srvip_n;
+	 uint16_t srvportn;
+	 uint16_t pad;
+	 uint16_t idn;	
+	 uint16_t metric;
+}neig_info;
+
+typedef struct{
 	 uint16_t num_update;
 	 uint16_t srv_port;
 	 uint32_t srv_ip;	
-	 uint32_t srvip_n[NUM_SERVER];
-	 uint16_t srvportn[NUM_SERVER];
-	 uint16_t pad[NUM_SERVER];
-	 uint16_t idn[NUM_SERVER];	
-	 uint16_t metric[NUM_SERVER];
+	 neig_info info[NUM_SERVER];
 }packet;
 //______________________________________________//
 
