@@ -123,11 +123,11 @@ void printTopology(){
 void update_table(){
 	int i; // just a count
 	int sender_id = searchId(findIP(findHost(temp.sock_info)));
-	if(!info.neig[sender_id] || info.neig[sender_id]>3) info.num_conn++;
+	if(!info.neig[sender_id]) info.num_conn++;
 	info.neig[sender_id]=1;
-	//set neighbor relationship if I get a packet from other server.
+	//set neighbor relationship if I get a packet from other server who is not my neighbor
 	//Even if I am not neighbor, if you are my neighbor, I know that you are my neighbor
-	printf("i got a packet From server ID:[%d]\n",sender_id+1);
+	printf("RECEIVED A MESSAGE FROM SERVER : [%d]\n",sender_id+1);
 	//sender id of my list
 	    for(i=0;i<info.num_serv;i++){
 	    //need to scan all index basically..
@@ -140,13 +140,8 @@ void update_table(){
 		   int tmp_idn = pack_income.info[i].idn;
 		   //id from incoming packet 	   
 		   if(my_id == tmp_idn){
-			if(info.conn[sender_id].metric > tmp_metric){
 				info.conn[sender_id].metric=tmp_metric;
-				//decrease num_chg cuz a value is updated, 
-		 	}
-		   //if my_id is his tmp_idn
-		   //compare the metric of his metric and my metric
-		   //if my metric is larger, syncronize the metric to smaller one 
+		   //if my_id is his tmp_idi syng value with other!
 		   }else if(info.conn[my_tmp_idn].metric == inf && tmp_metric < inf){
 			if(!info.neig[my_tmp_idn]){
 	   			info.conn[my_tmp_idn].metric = info.conn[sender_id].metric + tmp_metric;
@@ -163,15 +158,14 @@ void update_table(){
 		   // if my metric is not inf but not in income packet,
 		   // and if it is not my neighbor just disconnect it
 		   }else if(info.conn[my_tmp_idn].metric < inf && tmp_metric < inf){
-			if(info.conn[my_tmp_idn].metric > info.conn[sender_id].metric+tmp_metric){
-				info.conn[my_tmp_idn].metric = info.conn[sender_id].metric + tmp_metric;
+			if(!info.neig[my_tmp_idn]) info.conn[my_tmp_idn].metric = info.conn[sender_id].metric + tmp_metric;
+			else{
+			 	if(info.conn[my_tmp_idn].metric > info.conn[sender_id].metric+tmp_metric) info.conn[my_tmp_idn].metric = info.conn[sender_id].metric + tmp_metric;
 			}
 		   //if both link is up
 		   //we need to compare metric from my table and metric from incomepacket + metric between sender and me
 		   //if previous is larger, update!
-		   }else if(info.conn[my_tmp_idn].metric == tmp_idn && tmp_metric ==inf) break; 
-		   //this is the case where i am connected to other server, and other server is not,
-		   //so no need to do anything
+		   }
 		}  
 }
 int top_validate(FILE *top){
@@ -360,7 +354,7 @@ int step(){
 	makePacket();
 	//make packet
 	for(i =0; i< info.num_serv; i++){
-	   if(info.neig[i] && info.conn[i].metric<inf){	
+	   if(info.neig[i]){	
 	   //search my neighbors to send the packet
 		temp.sock_info.sin_port = htons(info.serv[i].port);
 		temp.sock_info.sin_addr.s_addr=inet_addr(info.serv[i].ip);
@@ -378,7 +372,7 @@ int step(){
 			info.neig[i] = 1;
 			//now i know my neighbor is alive!
 			//printf("recived from server : %s with port :%d \n",inet_ntoa(temp.sock_info.sin_addr),ntohs(temp.sock_info.sin_port));
-			printf("received from server ID [%d]\n", searchId(inet_ntoa(temp.sock_info.sin_addr))+1);
+			printf("Successfully Send The Packet to Server : [%d]\n", searchId(inet_ntoa(temp.sock_info.sin_addr))+1);
 		}else{
 			info.neig[i]++;
 			//record if I did not get the message from the server
@@ -386,6 +380,7 @@ int step(){
 			if(info.neig[i] == 4){
 				info.conn[i].metric = inf;
 				info.num_conn--;
+				info.neig[i] = 0;
 				printf("It seems server[%d] is dead..The cost will be set to infinity\n",i+1);
 			}	
 			//if it is 3rd time that i missed the packet, 
@@ -438,25 +433,26 @@ void runServ(){
 				strcasecmp(tokens[3],"inf")==0 ? (metric=inf) : strcasecmp(tokens[3],"zero")==0 ? (metric=zero): (metric=atoi(tokens[3]));						//metric could be either 'inf', 'zero' or any numeric value between 0<x<65535
 				if(check_id(num1)&&check_id(num2)&&check_cost(metric)){
 				//check if all arguments are valid
-			   	   if((num1==my_id)||(num2==my_id)){
-				   // check if the user tries to change cost of my connection
-				      if(num1!=num2){
-				      // check if the usier tries to change cost for looopback
-				        int cur_cost;
-					my_id == num1 ? (cur_cost = info.conn[num2-1].metric) : (cur_cost = info.conn[num1-1].metric);
-					// save cost value for update-to-same-cost case
-					if(cur_cost != metric){
+				   if((num1==my_id)&&(num2!=my_id)){
+				   // num1 should my_id and num2 should not be my id.
+				   // if num1==num2, its loop back
+				   // if num1 = neighbor,  & num2 =my_id, its wrong input
+				     if(info.neig[num2-1]){
+				      // check if given ID is my neighbor
+					if(info.conn[num2-1].metric != metric){
 					// check if cost for update is same as current costi
-					   my_id == num1 ? (info.conn[num2-1].metric=metric) : (info.conn[num1-1].metric=metric);
-					   my_id == num1 ? (info.neig[num2-1]=1) : (info.neig[num1-1]=1);
-				   	   metric == inf ? info.num_conn-- : (cur_cost==inf) ? info.num_conn++ : (info.num_conn+=0);
-					   // if metric is inf, it is the case same as disable.
-					   // but metric is not inf and cur_cost was inf, it is enabling a route
-					   // but metric is ont inf and cur_cost is not inf too it is just change of value. so leave it
+					   info.conn[num2-1].metric = metric;
+					   //then update
+					   if(metric == inf){
+					   // bur if you are updating cost to neighbor to infinity, 
+						 info.num_conn--;
+						 info.neig[num2-1]=0;
+						//it is no more your neighbor,
+					   }
 					   printf("<%s> SUCCESS!\n",tokens[0]);
 					}else printf("<%s> The cost is already set to the value! no need to update\n",tokens[0]);
-				      }else printf("<%s> you cannot update cost for loopback!\n",tokens[0]);
-				   }else printf("<%s> Your arguments does not contain id of current machine!\n",tokens[0]);					
+				      }else printf("<%s> Given Machine is not my neighbor!\n",tokens[0]);
+				   }else printf("<%s> First Argument should be My id and second neighbor!!\n",tokens[0]);
 				}else printf("<%s> Please check arguments for update!\n",tokens[0]);
 			}else if((strcasecmp(tokens[0],"step")==0)&&numTok==1){
 				if(step()) printf("<%s> SUCCESS\n",tokens[0]);
@@ -471,10 +467,10 @@ void runServ(){
 			}else if((strcasecmp(tokens[0],"disable")==0)&&numTok==2){
 				int dst = atoi(tokens[1]);
 				//parse given input 
-				if(dst && dst < NUM_SERVER && dst != info.conn[dst-1].src){
+				if(dst && dst <= NUM_SERVER && dst != info.conn[dst-1].src){
 				//to update cost value of given server id given dst id should be
 				//	1. dst should be larger than 0
-				//	2. dst should be less than total number of server
+				//	2. dst should be equal or less than total number of server
 				//	3. dst should not be same as src - cannot update loopback
 				    if(info.neig[dst-1]){
 					if(info.conn[dst-1].metric != inf){
@@ -489,6 +485,7 @@ void runServ(){
 			}else if((strcasecmp(tokens[0],"crash")==0)&&numTok==1){
 				int i;
 				close(svSock.sock);
+				FD_CLR(svSock.sock,&readfds);
 				//disable my only socket.. cannot receive or send any data from now
 				printf("Closed Datagram socket\n");	
 				info.num_conn=0;
