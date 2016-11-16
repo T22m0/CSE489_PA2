@@ -1,0 +1,77 @@
+Issac Choi[5001-5220] CSE489 PA2 
+Implement Distance Vector Routing Protocol for 5 hosts.
+
+This program runs distance vector routing protocol using Bellman-Ford algorithm on each hosts.
+
+Available Commands - update, step, packets, display, disable, crash
+
+Usage - 
+update <ID of current machine> <ID of a neighbor> <Cost>
+	First argument should be ID of current machine, otherwise, it will print an error message.
+	Second Argument should be ID of a NEIGHBOR, otherwise, it will print an error message.
+		if you set cost to the neighbor to infinite, you will lose the neighbor,
+		once you lost your neighbor, there is no way to bring him back 
+		except incoming packet from the neighbor
+	Thrid argument should be valid cost such that 0 < [cost] <= 65535(or inf)
+		you cannot give a cost 0 to neighbor. cost 0 is assigned to only loopback.
+step
+	Imediatley send packets to nearby neighbors. After this command executed, the time value  is reset to 
+	the value that you typed at start up. 
+	The time value will not be reset even if there is a incoming packet. 
+	The only possible way to send the packet is this command and in case of timeout.
+packets
+	Show number of packets since the this command executed. 
+	value of packet will be set to 0.
+display
+	This command will print out Number of total server and Number of Current Connection
+	the list of Server ID and port & current server-neighbor cost list. 
+	It will look similer to the given topology but it is lively changing.
+disable <Server ID>
+	This command disable a neighborship with other server. 
+	NOTE that disabling only from one side will not disable neighborship for both machine.
+	You need to disable from both side to terminate the relationship.
+	If you type disable from only one side, the cost will be renewed when the server
+	receive the packet from the other machine that you just disabled
+	
+crash
+	This command will close all relationship with neighbors. all values will be set to infinite
+	and also the socket will be closed. So from this point, there is no way to communicate.
+
+Implementation - 
+	I used only one UDP socket, timeval structure, and FD_SET.
+	When I make UDP socket, I set receive timeout on the socket by setsocktop method. 
+	Since I should multiplex both userinput and socketinput, I used fd_set to handle both.
+	
+	At start up, the probram will run top_validate() and init()
+	top_validate will read topology from given topology file
+	init will initialize structures and make udp socket	
+	Note that if given topology on start up contains tree structure, 
+	it will be robust on changing value of vectors.
+	However, in case of looping topology there is a problem so called "count-to-infinity".
+	As servers are trying to converge, looping will occur the problem. 
+	
+	There is method step() that sends packets to the neighbors. 
+	I made this method because there are two case to send the packets
+		1. timeout.
+			if select method did not read any input in given time, it will send the packet.
+		2. user input
+			if select method got user input of "step" this will send the packet
+	Since both cases uses same method, it is easy to manage timeout. 
+	
+	When packet arrives from other host, it will execute update_table() method.
+	This method will set new cost for each entry of routingtable according to BF algorithm.
+
+	SortConnInfo method will sort the connection routing information based on number of destination.
+
+	If you need more explanation about code, There are comments in code!
+	Bur if you have still a question Please mail to issaccho@buffalo.edu 
+
+Routing table Data Structure
+_____________________________
+file name : ./inc/main.h
+line number: 30 - 48
+
+Packet Data Structure
+_____________________________
+file name : ./inc/main.h
+line number: 53 - 66

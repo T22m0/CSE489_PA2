@@ -61,7 +61,7 @@ int isValidIP(char *ip){
 	int result = inet_pton(AF_INET, ip, &(t.sin_addr));
 	return result != 0;
 }
-//to determine if given string is IPaddress
+//to determine if given string is IPv4
 int check_id(int i){
 	return (1<=i)&&(i<=info.num_serv);
 }
@@ -69,6 +69,7 @@ int check_id(int i){
 int check_cost(uint16_t i){
 	return (zero<i)&&(i<=inf);
 }
+//cost should be larger than 0 and less or equal to inf. 
 int check_update(){
 	update = 0;
 	int i;
@@ -114,9 +115,9 @@ void printTopology(){
 	for(i=0; i< info.num_serv; i++){
 		printf("[Connection%d] src:%d, dst:%d, metric:%d\n",i+1,info.conn[i].src,info.conn[i].dst,info.conn[i].metric);
 	}printf("\n");
-	for(i=0; i< info.num_serv; i++){
-		printf("[Neighbor%d] %d\n",i+1,info.neig[i]);
-	}
+//	for(i=0; i< info.num_serv; i++){
+//		printf("[Neighbor%d] %d\n",i+1,info.neig[i]);
+//	}
 	//testing
 }
 //print out current topology table
@@ -159,9 +160,8 @@ void update_table(){
 		   // and if it is not my neighbor just disconnect it
 		   }else if(info.conn[my_tmp_idn].metric < inf && tmp_metric < inf){
 			if(!info.neig[my_tmp_idn]) info.conn[my_tmp_idn].metric = info.conn[sender_id].metric + tmp_metric;
-			else{
-			 	if(info.conn[my_tmp_idn].metric > info.conn[sender_id].metric+tmp_metric) info.conn[my_tmp_idn].metric = info.conn[sender_id].metric + tmp_metric;
-			}
+			else if(info.conn[my_tmp_idn].metric > info.conn[sender_id].metric+tmp_metric) 
+				info.conn[my_tmp_idn].metric = info.conn[sender_id].metric + tmp_metric;
 		   //if both link is up
 		   //we need to compare metric from my table and metric from incomepacket + metric between sender and me
 		   //if previous is larger, update!
@@ -430,7 +430,8 @@ void runServ(){
 				int num2 = atoi(tokens[2]);
 				//parse ids from tokens
 				int metric;
-				strcasecmp(tokens[3],"inf")==0 ? (metric=inf) : strcasecmp(tokens[3],"zero")==0 ? (metric=zero): (metric=atoi(tokens[3]));						//metric could be either 'inf', 'zero' or any numeric value between 0<x<65535
+				strcasecmp(tokens[3],"inf")==0 ? (metric=inf) : strcasecmp(tokens[3],"zero")==0 ? (metric=zero): (metric=atoi(tokens[3]));						
+				//metric could be either 'inf', 'zero' or any numeric value between 0<x<65535
 				if(check_id(num1)&&check_id(num2)&&check_cost(metric)){
 				//check if all arguments are valid
 				   if((num1==my_id)&&(num2!=my_id)){
